@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class CSVReader : MonoBehaviour
@@ -10,26 +11,29 @@ public class CSVReader : MonoBehaviour
     static int frame_count = 0;
 
     public GameObject car;
+    public GameObject lights;
+    public GameObject honk;
+    public GameObject brake;
+
 
     public GameObject firstObject;
     public GameObject secondObject;
     public GameObject thirdObject;
     public GameObject fourthObject;
     List<List<Obstacle>> obstacles = new List<List<Obstacle>>();
-    float startTime;
-    float transitionDuration = 1f;
-    static float distance_of_car = 1.5f;
-    float minYawRate = -0.0571f;
-    float maxYawRate = 0.404f;
 
-
-    float minDegreesPerSecond = 0.0f;
-    float maxDegreesPerSecond = 360.0f;
     List<float> timeStamps = new List<float>();
     List<float> yawRates = new List<float>();
     List<float> convertedYawRates = new List<float>();
+    List<float> egoSpeed = new List<float>();
+
     void Start()
     {
+        honk.SetActive(false);
+        lights.SetActive(false);
+        brake.SetActive(false);
+
+
         string path = "Assets/Scripts/Data/inputData.csv";
 
         using (var reader = new StreamReader(path))
@@ -43,15 +47,16 @@ public class CSVReader : MonoBehaviour
                 string[] splittedLine = line.Split(",");
                 timeStamps.Add(float.Parse(splittedLine[splittedLine.Length - 1]));
                 yawRates.Add(float.Parse(splittedLine[splittedLine.Length - 2]));
+                egoSpeed.Add(float.Parse(splittedLine[9]) / 256);   // m/s
                 List<Obstacle> obstacle_frames = new List<Obstacle>();
                 for (int i = 0; i < 4; i++)
                 {
                     obstacle_frames.Add(new Obstacle()
                     {
-                        distance_x = float.Parse(splittedLine[1 + i]) / 128,
-                        distance_y = float.Parse(splittedLine[2 + i]) / 128,
-                        speed_x = Int32.Parse(splittedLine[10 + i]) / 256,
-                        speed_y = Int32.Parse(splittedLine[11 + i]) / 256
+                        distance_x = float.Parse(splittedLine[1 + i]) / 128,    // m
+                        distance_y = float.Parse(splittedLine[2 + i]) / 128,   // m
+                        speed_x = Int32.Parse(splittedLine[10 + i]) / 256,     // m/s
+                        speed_y = Int32.Parse(splittedLine[11 + i]) / 256     // m/s
                     });
                     obstacles.Add(obstacle_frames);
                 };
@@ -113,15 +118,30 @@ public class CSVReader : MonoBehaviour
             {
                 fourthObject.SetActive(true);
             }
-            frame_count++;
-        }
- if (IsColliding(firstObject.transform.position) || IsColliding(secondObject.transform.position) || IsColliding(thirdObject.transform.position) || IsColliding(fourthObject.transform.position))
-    {
-        // Collision detected, apply avoidance action
-        ApplyAvoidanceAction();
-    }
-    }
+            // collision avoidance
+            if (frame_count > 0 && frame_count < timeStamps.Count)
+            {
+                for (int i = 0; i < 1; i++)
+                {
+                    float egoAcceleration = (egoSpeed[frame_count] - egoSpeed[frame_count - 1]) / (timeStamps[frame_count] - timeStamps[frame_count - 1]);
+                    float breakDistance = CalculateBreakDistance(vego: egoSpeed[frame_count], aego: egoAcceleration);
+                    float object_i_distance = (float)Math.Sqrt(
+                        Math.Pow(obstacles[frame_count][i].distance_x, 2f) +
+                        Math.Pow(obstacles[frame_count][i].distance_y, 2f));
+                    AvoidCollision(breakDistance, object_i_distance);
 
+
+                }
+            }
+            frame_count++;
+
+            if (IsColliding(firstObject.transform.position) || IsColliding(secondObject.transform.position) || IsColliding(thirdObject.transform.position) || IsColliding(fourthObject.transform.position))
+            {
+                // Collision detected, apply avoidance action
+                AvoidCollision(0, 0);
+            }
+        }
+    }
 
     bool IsColliding(Vector2 relativeObstaclePosition)
     {
@@ -132,27 +152,12 @@ public class CSVReader : MonoBehaviour
         return carCollider.OverlapPoint(relativeObstaclePosition);
     }
 
-    void ApplyAvoidanceAction()
-{
-    // Implement your avoidance action here
-    // For example, you can stop the car, apply brakes, or change direction
-    // ...
-
-    Debug.Log("Collision Detected! Applying Avoidance Action.");
-}
-
     public class Obstacle
     {
         public float distance_x { get; set; }
         public float distance_y { get; set; }
         public float speed_x { get; set; }
         public float speed_y { get; set; }
-    }
-
-    public class Vehicle
-    {
-        public float speed { get; set; }
-        public float yawrate { get; set; }
     }
 
     public static float CalculateBreakDistance(float vego, float aego, float maxJerk = -30f, float amax = -9f, float tlat = 0.2f, float v0 = 0f)
@@ -166,24 +171,27 @@ public class CSVReader : MonoBehaviour
         float distanceOneLatency = vego * tlat + aego / 2 * tlat * tlat;
         float distanceTwoBreaking = maxJerk / 6 * t2 * t2 * t2 + aego / 2 * t2 * t2 + vego * t2;
         float distannceThreeFullBreak = amax / 2 * t3 * t3 + v1 * t3;
-
-
+        break_distance = distanceOneLatency + distanceTwoBreaking + distannceThreeFullBreak;
 
         return break_distance;
     }
 
-    public static float avoidCollision(float break_distance, float distance_of_object)
+    public float AvoidCollision(float break_distance, float distance_of_object)
     {
-        if (break_distance <= distance_of_car + 1f)
+        if (break_distance-distance_of_object <=  1f)
         {
-            // if we can break < 1m
-            // TODO: Warning
-        }
-        else if (break_distance <= distance_of_car + 0.5f)
+            honk.SetActive(true);
+            lights.SetActive(true);
+        } else
         {
-            // if we can break < 0.5m
-            // TODO: BREAK
+            honk.SetActive(false);
+            lights.SetActive(false);
         }
+        if (break_distance - distance_of_object <=  0.5f)
+        {
+            brake.SetActive(true);
+
+        } else { brake.SetActive(false); }
         return 1f;
     }
 }
