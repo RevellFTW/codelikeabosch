@@ -1,5 +1,5 @@
 # Automatic Emergency Braking To Save Lives
-We simulated an the visualisation from the classified .CSV data in Unity, using C#
+We simulated an the visualisation from the classified .CSV data in Unity, using C#.
 
 ## Simulation & Scene
 The scene is about a car turning out from a paralel parking spot then it drives forward. 
@@ -36,7 +36,7 @@ public static float CalculatebrakeDistance(float vego, float aego, float maxJerk
         return brake_distance;
     }
 ```
-The final brake_distance consists of the distance that the car travels between the object detection and the braking. This is a so-called latency distance. 
+The final `brake_distance` consists of the distance that the car travels between the object detection and the braking. This is a so-called latency distance. 
 After we calculate the second part of the braking distance which consist of the travelled distance untill the full braking preasure is built up. 
 The last part of the braking distance calculation is calculated with full braking. 
 
